@@ -32,6 +32,7 @@ let
     llvm-polly = callPackage ./llvm.nix { enablePolly = true; };
 
     clang-unwrapped = callPackage ./clang {
+      inherit (tools) lld;
       inherit clang-tools-extra_src;
     };
     clang-polly-unwrapped = callPackage ./clang {
@@ -56,8 +57,10 @@ let
 
     libstdcxxClang = wrapCCWith rec {
       cc = tools.clang-unwrapped;
-      extraPackages = [
+      extraTools = [
         libstdcxxHook
+      ];
+      extraPackages = [
         targetLlvmLibraries.compiler-rt
       ];
       extraBuildCommands = mkExtraBuildCommands cc;

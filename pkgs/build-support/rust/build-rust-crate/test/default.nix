@@ -8,6 +8,14 @@ let
     } // args;
   in buildRustCrate p;
 
+  mkCargoToml =
+    { name, crateVersion ? "0.1.0", path ? "Cargo.toml" }:
+      mkFile path ''
+        [package]
+        name = ${builtins.toJSON name}
+        version = ${builtins.toJSON crateVersion}
+      '';
+
   mkFile = destination: text: writeTextFile {
     name = "src";
     destination = "/${destination}";
@@ -89,7 +97,7 @@ let
   in rec {
 
   tests = let
-    cases = {
+    cases = rec {
       libPath =  { libPath = "src/my_lib.rs"; src = mkLib "src/my_lib.rs"; };
       srcLib =  { src = mkLib "src/lib.rs"; };
 
@@ -199,6 +207,91 @@ let
           })
         ];
       };
+      buildScriptDeps = let
+        depCrate = boolVal: mkCrate {
+          crateName = "bar";
+          src = mkFile "src/lib.rs" ''
+            pub const baz: bool = ${boolVal};
+          '';
+        };
+      in {
+        crateName = "foo";
+        src = symlinkJoin {
+          name = "build-script-and-main";
+          paths = [
+            (mkFile  "src/main.rs" ''
+              extern crate bar;
+              #[cfg(test)]
+              #[test]
+              fn baz_false() { assert!(!bar::baz); }
+              fn main() { }
+            '')
+            (mkFile  "build.rs" ''
+              extern crate bar;
+              fn main() { assert!(bar::baz); }
+            '')
+          ];
+        };
+        buildDependencies = [ (depCrate "true") ];
+        dependencies = [ (depCrate "false") ];
+        buildTests = true;
+        expectedTestOutputs = [ "test baz_false ... ok" ];
+      };
+      # Regression test for https://github.com/NixOS/nixpkgs/issues/74071
+      # Whenevever a build.rs file is generating files those should not be overlayed onto the actual source dir
+      buildRsOutDirOverlay = {
+        src = symlinkJoin {
+          name = "buildrs-out-dir-overlay";
+          paths = [
+            (mkLib "src/lib.rs")
+            (mkFile "build.rs" ''
+              use std::env;
+              use std::ffi::OsString;
+              use std::fs;
+              use std::path::Path;
+              fn main() {
+                let out_dir = env::var_os("OUT_DIR").expect("OUT_DIR not set");
+                let out_file = Path::new(&out_dir).join("lib.rs");
+                fs::write(out_file, "invalid rust code!").expect("failed to write lib.rs");
+              }
+            '')
+          ];
+        };
+      };
+      rustCargoTomlInSubDir = {
+        # The "workspace_member" can be set to the sub directory with the crate to build.
+        # By default ".", meaning the top level directory is assumed.
+        # Using null will trigger a search.
+        workspace_member = null;
+        src = symlinkJoin rec {
+          name = "find-cargo-toml";
+          paths = [
+            (mkCargoToml { name = "ignoreMe"; })
+            (mkTestFileWithMain "src/main.rs" "ignore_main")
+
+            (mkCargoToml { name = "rustCargoTomlInSubDir"; path = "subdir/Cargo.toml"; })
+            (mkTestFileWithMain "subdir/src/main.rs" "src_main")
+            (mkTestFile "subdir/tests/foo/main.rs" "tests_foo")
+            (mkTestFile "subdir/tests/bar/main.rs" "tests_bar")
+          ];
+        };
+        buildTests = true;
+        expectedTestOutputs = [
+          "test src_main ... ok"
+          "test tests_foo ... ok"
+          "test tests_bar ... ok"
+        ];
+      };
+
+      rustCargoTomlInTopDir =
+        let
+          withoutCargoTomlSearch = builtins.removeAttrs rustCargoTomlInSubDir [ "workspace_member" ];
+        in
+          withoutCargoTomlSearch // {
+            expectedTestOutputs = [
+              "test ignore_main ... ok"
+            ];
+          };
     };
     brotliCrates = (callPackage ./brotli-crates.nix {});
   in lib.mapAttrs (key: value: mkTest (value // lib.optionalAttrs (!value?crateName) { crateName = key; })) cases // {

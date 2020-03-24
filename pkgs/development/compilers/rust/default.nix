@@ -4,6 +4,7 @@
 , bootstrapVersion
 , bootstrapHashes
 , selectRustPackage
+, rustcPatches ? []
 }:
 { stdenv, lib
 , buildPackages
@@ -17,20 +18,21 @@
       "armv7a" = "armv7";
       "armv7l" = "armv7";
       "armv6l" = "arm";
-    }.${cpu.name} or cpu.name;
-  in "${cpu_}-${vendor.name}-${kernel.name}${lib.optionalString (abi.name != "unknown") "-${abi.name}"}";
+    }.${cpu.name} or platform.rustc.arch or cpu.name;
+  in platform.rustc.config
+    or "${cpu_}-${vendor.name}-${kernel.name}${lib.optionalString (abi.name != "unknown") "-${abi.name}"}";
 
   makeRustPlatform = { rustc, cargo, ... }: rec {
     rust = {
       inherit rustc cargo;
     };
 
-    fetchcargo = buildPackages.callPackage ../../../build-support/rust/fetchcargo.nix {
+    fetchCargoTarball = buildPackages.callPackage ../../../build-support/rust/fetchCargoTarball.nix {
       inherit cargo;
     };
 
     buildRustPackage = callPackage ../../../build-support/rust {
-      inherit rustc cargo fetchcargo;
+      inherit rustc cargo fetchCargoTarball;
     };
 
     rustcSrc = callPackage ./rust-src.nix {
@@ -72,6 +74,8 @@
         version = rustcVersion;
         sha256 = rustcSha256;
         inherit enableRustcDev;
+
+        patches = rustcPatches;
 
         # Use boot package set to break cycle
         rustPlatform = bootRustPlatform;

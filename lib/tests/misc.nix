@@ -148,7 +148,7 @@ runTests {
             "${builtins.storeDir}/d945ibfx9x185xf04b890y4f9g3cbb63-python-2.7.11";
       in {
         storePath = isStorePath goodPath;
-        storePathDerivation = isStorePath (import ../.. {}).hello;
+        storePathDerivation = isStorePath (import ../.. { system = "x86_64-linux"; }).hello;
         storePathAppendix = isStorePath
           "${goodPath}/bin/python";
         nonAbsolute = isStorePath (concatStrings (tail (stringToCharacters goodPath)));
@@ -345,6 +345,18 @@ runTests {
       [bar]
 
       [foo]
+    '';
+  };
+
+  testToINIDuplicateKeys = {
+    expr = generators.toINI { listsAsDuplicateKeys = true; } { foo.bar = true; baz.qux = [ 1 false ]; };
+    expected = ''
+      [baz]
+      qux=1
+      qux=false
+
+      [foo]
+      bar=true
     '';
   };
 

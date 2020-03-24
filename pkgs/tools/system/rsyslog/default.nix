@@ -5,6 +5,7 @@
 , liblogging ? null, libnet ? null, hadoop ? null, rdkafka ? null
 , libmongo-client ? null, czmq ? null, rabbitmq-c ? null, hiredis ? null, mongoc ? null
 , libmaxminddb ? null
+, nixosTests ? null
 }:
 
 with stdenv.lib;
@@ -13,11 +14,11 @@ let
 in
 stdenv.mkDerivation rec {
   pname = "rsyslog";
-  version = "8.1911.0";
+  version = "8.2002.0";
 
   src = fetchurl {
     url = "https://www.rsyslog.com/files/download/rsyslog/${pname}-${version}.tar.gz";
-    sha256 = "01713vwz3w5fx9b97286h1rx9hxhjsdah96nyhh75bb23impgx71";
+    sha256 = "1y414g61j93dgm5xg0ni985a99cyag0flvv1fqn2188dhr6w31py";
   };
 
   #patches = [ ./fix-gnutls-detection.patch ];
@@ -103,8 +104,12 @@ stdenv.mkDerivation rec {
     (mkFlag true                      "generate-man-pages")
   ];
 
+  passthru.tests = {
+    nixos-rsyslogd = nixosTests.rsyslogd;
+  };
+
   meta = {
-    homepage = https://www.rsyslog.com/;
+    homepage = "https://www.rsyslog.com/";
     description = "Enhanced syslog implementation";
     changelog = "https://raw.githubusercontent.com/rsyslog/rsyslog/v${version}/ChangeLog";
     license = licenses.gpl3;
